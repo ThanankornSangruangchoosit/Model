@@ -68,10 +68,12 @@
             y: lightSource.position.y,
             z: lightSource.position.z,
             intensity: lightSource.intensity,
+            color: '#ffffff',
             mouseMove: true,
             reset: function () {
                 lightSource.position.set(5, 6, 5);
                 lightSource.intensity = 1.2;
+                lightSource.color.set(lightState.color = '#ffffff');
                 lightState.x = 5;
                 lightState.y = 6;
                 lightState.z = 5;
@@ -92,6 +94,9 @@
         });
         lightFolder.add(lightState, 'intensity', 0, 3, 0.1).name('Intensity').onChange((value) => {
             lightSource.intensity = value;
+        });
+        lightFolder.addColor(lightState, 'color').name('Sunlight color').onChange((value) => {
+            lightSource.color.set(value);
         });
         lightFolder.add(lightState, 'mouseMove').name('Shift + drag');
         lightFolder.add(lightState, 'reset').name('Reset light');
@@ -144,7 +149,7 @@
             dragState.active = false;
         });
 
-        const exrSkyboxUrl = 'https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/1k/venice_sunset_1k.exr';
+        const exrSkyboxUrl = 'https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/4k/kloppenheim_06_puresky_4k.exr';
         const pmremGenerator = new THREE.PMREMGenerator(renderer);
         pmremGenerator.compileEquirectangularShader();
 
@@ -224,7 +229,20 @@ const uvs = [
                     child.receiveShadow = true;
                 }
             });
-            model.position.set(3, 0, -3);
+            model.position.set(3, 0, -4);
+            scene.add(model);
+
+        });
+        const loader3 = new THREE.GLTFLoader();
+        loader3.load('https://thanankornsangruangchoosit.github.io/Ball/jack_coopers_helmet__titanfall_2.glb', (gltf) => {    //เปลี่ยนตรงนี้นะเติ้ล
+            const model = gltf.scene;
+            model.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                }
+            });
+            model.position.set(4, 1.5, 0);
             scene.add(model);
 
         });
@@ -236,7 +254,7 @@ const uvs = [
             map: texFloor,
             doubleSided: true
         });
-        const planeGeometry = new THREE.PlaneGeometry(10, 10);
+        const planeGeometry = new THREE.PlaneGeometry(15, 15);
         const plane = new THREE.Mesh(planeGeometry, matFloor);
         plane.rotation.x = -Math.PI / 2; 
         plane.receiveShadow = true;
