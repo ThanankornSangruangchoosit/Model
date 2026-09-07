@@ -458,6 +458,20 @@ const uvs = [
         pbrSphere2.castShadow = true;
         scene.add(pbrSphere2);
 
+        const materialFolder = gui.addFolder('PBR Materials');
+        const materialControls = [
+            { name: 'Blue metal', material: PBRSphereMaterial },
+            { name: 'Red metal', material: PBRSphereMaterial1 },
+            { name: 'Purple metal', material: PBRSphereMaterial2 }
+        ];
+
+        materialControls.forEach(({ name, material }) => {
+            const folder = materialFolder.addFolder(name);
+            folder.add(material, 'metalness', 0, 1, 0.01).name('Metalness');
+            folder.add(material, 'roughness', 0, 1, 0.01).name('Roughness');
+        });
+        materialFolder.open();
+
 
 
 
