@@ -4,14 +4,144 @@
 <head>
     <title>Materials</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&display=swap');
+
+        :root {
+            --panel: rgba(16, 22, 30, 0.86);
+            --panel-border: rgba(255, 255, 255, 0.14);
+            --text: #f4f7fb;
+            --muted: #9eacbb;
+            --accent: #76e0c0;
+        }
+
         body {
             margin: 0;
             overflow: hidden;
+            background: #10161e;
+            font-family: 'Manrope', sans-serif;
+        }
+
+        .scene-heading {
+            position: fixed;
+            top: 24px;
+            left: 28px;
+            z-index: 5;
+            color: var(--text);
+            pointer-events: none;
+        }
+
+        .scene-heading .eyebrow {
+            margin: 0 0 6px;
+            color: var(--accent);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
+        .scene-heading h1 {
+            margin: 0;
+            font-size: clamp(22px, 3vw, 34px);
+            font-weight: 700;
+            letter-spacing: 0;
+        }
+
+        .scene-heading p {
+            margin: 7px 0 0;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .dg.ac {
+            top: 20px !important;
+            right: 20px !important;
+            z-index: 10 !important;
+        }
+
+        .dg.main {
+            width: 272px !important;
+            color: var(--text);
+            font-family: 'Manrope', sans-serif;
+            font-size: 12px;
+        }
+
+        .dg.main .close-button {
+            width: 100% !important;
+            height: 28px;
+            color: var(--muted);
+            background: rgba(255, 255, 255, 0.06);
+            line-height: 28px;
+        }
+
+        .dg li:not(.folder) {
+            height: 31px;
+            background: transparent;
+        }
+
+        .dg .folder {
+            border-bottom: 1px solid var(--panel-border);
+            background: var(--panel);
+        }
+
+        .dg .folder > .title {
+            height: 38px;
+            color: var(--text);
+            background: transparent;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 38px;
+        }
+
+        .dg .cr {
+            border-left: 1px solid var(--panel-border);
+            border-right: 1px solid var(--panel-border);
+            background: var(--panel);
+        }
+
+        .dg .c input[type=text],
+        .dg .c input[type=number] {
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .dg .c .slider {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .dg .c .slider-fg {
+            background: var(--accent);
+        }
+
+        .dg .c input[type=checkbox]:checked + .checkbox {
+            color: var(--accent);
+        }
+
+        @media (max-width: 600px) {
+            .scene-heading {
+                top: 16px;
+                left: 18px;
+            }
+
+            .dg.ac {
+                top: auto !important;
+                right: 12px !important;
+                bottom: 12px !important;
+                left: 12px !important;
+            }
+
+            .dg.main {
+                width: 100% !important;
+            }
         }
     </style>
 </head>
 
 <body>
+    <div class="scene-heading">
+        <h1>Among Us</h1>
+        <p>6721601231 ธนัญกรณ์ แสงเรือชูสิทธิ์</p>
+    </div>
+
     <!-- core three.js -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
@@ -69,6 +199,9 @@
             z: lightSource.position.z,
             intensity: lightSource.intensity,
             color: '#ffffff',
+            autoRotate: true,
+            rotationSpeed: 0.5,
+            rotationRadius: 7.1,
             mouseMove: true,
             reset: function () {
                 lightSource.position.set(5, 6, 5);
@@ -78,6 +211,7 @@
                 lightState.y = 6;
                 lightState.z = 5;
                 lightState.intensity = 1.2;
+                lightState.rotationRadius = Math.sqrt(50);
                 gui.updateDisplay();
             }
         };
@@ -98,6 +232,9 @@
         lightFolder.addColor(lightState, 'color').name('Sunlight color').onChange((value) => {
             lightSource.color.set(value);
         });
+        lightFolder.add(lightState, 'autoRotate').name('Auto rotate');
+        lightFolder.add(lightState, 'rotationSpeed', 0, 2, 0.1).name('Rotation speed');
+        lightFolder.add(lightState, 'rotationRadius', 1, 12, 0.1).name('Rotation radius');
         lightFolder.add(lightState, 'mouseMove').name('Shift + drag');
         lightFolder.add(lightState, 'reset').name('Reset light');
         lightFolder.open();
@@ -220,8 +357,8 @@ const uvs = [
             scene.add(model);
         });
 
-        const loader2 = new THREE.GLTFLoader();
-        loader2.load('https://thanankornsangruangchoosit.github.io/Ball/stylized_tree (1).glb', (gltf) => {    //เปลี่ยนตรงนี้นะเติ้ล
+        /*const loader2 = new THREE.GLTFLoader();
+        loader2.load('https://thanankornsangruangchoosit.github.io/Ball/backgroundOr.glb', (gltf) => {    //เปลี่ยนตรงนี้นะเติ้ล
             const model = gltf.scene;
             model.traverse((child) => {
                 if (child.isMesh) {
@@ -232,53 +369,40 @@ const uvs = [
             model.position.set(3, 0, -4);
             scene.add(model);
 
-        });
-        const loader3 = new THREE.GLTFLoader();
-        loader3.load('https://thanankornsangruangchoosit.github.io/Ball/jack_coopers_helmet__titanfall_2.glb', (gltf) => {    //เปลี่ยนตรงนี้นะเติ้ล
-            const model = gltf.scene;
-            model.traverse((child) => {
-                if (child.isMesh) {
-                    child.castShadow = true;
-                    child.receiveShadow = true;
-                }
-            });
-            model.position.set(4, 1.5, 0);
-            scene.add(model);
-
-        });
+        });*/
 
         //ใส่พื้น
-        const texFloor = new THREE.TextureLoader().load('https://sibsansuk.github.io/mossy_cobblestone_diff_1k.jpg', t => {
+        const texFloor = new THREE.TextureLoader().load('https://thanankornsangruangchoosit.github.io/Ball/Screenshot 2026-09-07 193741.png', t => {
         });
         const matFloor = new THREE.MeshStandardMaterial({
             map: texFloor,
             doubleSided: true
         });
-        const planeGeometry = new THREE.PlaneGeometry(15, 15);
+        const planeGeometry = new THREE.PlaneGeometry(30, 30);
         const plane = new THREE.Mesh(planeGeometry, matFloor);
         plane.rotation.x = -Math.PI / 2; 
         plane.receiveShadow = true;
         
         scene.add(plane);
-
+        /*
          //basic shader sphere
-        /*const sphereGeometry = new THREE.SphereGeometry(0.5, 32, 32);
+        const sphereGeometry = new THREE.SphereGeometry(0.5, 32, 32);
         const sphereMaterial = new THREE.MeshBasicMaterial(
             { 
-                color: 0x00FF00 
+                color: 0xE70000FF 
             });
         const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-        sphere.position.set(2, 1, -2);
+        sphere.position.set(-6, 0.5, 2.5);
         sphere.castShadow = true;
         scene.add(sphere);
 
          //lambert shader sphere
-        const lambertSphereGeometry = new THREE.SphereBufferGeometry(0.6, 48, 48);
+        const lambertSphereGeometry = new THREE.SphereBufferGeometry(0.5, 32, 32);
         const lambertSphereMaterial = new THREE.MeshLambertMaterial({
-            color: 0xFF0000
+            color: 0xE70000FF
         });
         const lambertsphere = new THREE.Mesh(lambertSphereGeometry, lambertSphereMaterial);
-        lambertsphere.position.set(0, 1, -2);
+        lambertsphere.position.set(-4, 0.5, 3);
         lambertsphere.castShadow = true;
         scene.add(lambertsphere);
 
@@ -286,36 +410,67 @@ const uvs = [
         const phongSphereGeometry = new THREE.SphereBufferGeometry(0.5, 32, 32);
         const phongSphereMaterial = new THREE.MeshPhongMaterial(
             {
-                color: 0x0000FF,
+                color: 0xE70000,
                 shininess: 100
             });
         const phongSphere = new THREE.Mesh(phongSphereGeometry, phongSphereMaterial);
-        phongSphere.position.set(-2, 1, -2);
+        phongSphere.position.set(-2, 0.5, 3.5);
         phongSphere.castShadow = true;
-        scene.add(phongSphere);
+        scene.add(phongSphere);*/
 
         //Physically-Based Rendering(PBR)
         const PBRSphereGeometry = new THREE.SphereGeometry(0.5, 32, 32);
         const PBRSphereMaterial = new THREE.MeshStandardMaterial(
             {
-                color: 0x0000FF,
-                metalness: 0.9,
-                roughness: 0.1
+                color: 0x0297E7FF,
+                metalness: 0,
+                roughness: 0
 
             });
         const pbrSphere = new THREE.Mesh(PBRSphereGeometry, PBRSphereMaterial);
-        pbrSphere.position.set(0, 2, 2);
+        pbrSphere.position.set(-2, 2, -2);
         pbrSphere.castShadow = true;
-        scene.add(pbrSphere);*/
+        scene.add(pbrSphere);
 
+        const PBRSphereGeometry1 = new THREE.SphereGeometry(0.5, 32, 32);
+        const PBRSphereMaterial1 = new THREE.MeshStandardMaterial(
+            {
+                color: 0xE70000,
+                metalness: 0.7,
+                roughness: 0.5
 
+            });
+        const pbrSphere1 = new THREE.Mesh(PBRSphereGeometry1, PBRSphereMaterial1);
+        pbrSphere1.position.set(2, 2, -2);
+        pbrSphere1.castShadow = true;
+        scene.add(pbrSphere1);
+
+        const PBRSphereGeometry2 = new THREE.SphereGeometry(0.5, 32, 32);
+        const PBRSphereMaterial2 = new THREE.MeshStandardMaterial(
+            {
+                color: 0x4F284B,
+                metalness: 0.7,
+                roughness: 0.5
+
+            });
+        const pbrSphere2 = new THREE.Mesh(PBRSphereGeometry2, PBRSphereMaterial2);
+        pbrSphere2.position.set(0, 4, -2);
+        pbrSphere2.castShadow = true;
+        scene.add(pbrSphere2);
 
 
 
 
         
         function animate(t) {
-            //mesh.rotation.y = Math.sin(t * 0.001);
+            if (lightState.autoRotate) {
+                const angle = t * 0.001 * lightState.rotationSpeed;
+                lightSource.position.x = Math.cos(angle) * lightState.rotationRadius;
+                lightSource.position.z = Math.sin(angle) * lightState.rotationRadius;
+                lightState.x = lightSource.position.x;
+                lightState.z = lightSource.position.z;
+                gui.updateDisplay();
+            }
             renderer.render(scene, camera);
             requestAnimationFrame(animate);
         }
