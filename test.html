@@ -72,6 +72,30 @@
             text-align: center;
         }
 
+        /* --- ปุ่มรีเซ็ตมุมกล้องกลางจอแสดงผล --- */
+        #btnResetCamera {
+            display: none;
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            background: rgba(255, 90, 95, 0.9);
+            color: #fff;
+            border: none;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 25;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            transition: all 0.2s ease;
+        }
+        #btnResetCamera:hover {
+            background: rgba(255, 90, 95, 1);
+            transform: translateX(-50%) scale(1.05);
+        }
+
         /* --- กล่อง debug: โชว์ชื่อ object ที่คลิกล่าสุด --- */
         #debugBox {
             position: fixed;
@@ -91,6 +115,7 @@
 <body>
 
     <div id="hint">คลิกปุ่ม projects / about me / credits / picture บนผนังร้านเพื่อดูข้อมูล</div>
+    <button id="btnResetCamera">← กลับมุมมองหน้าร้าน</button>
     <div id="debugBox"></div>
 
     <!-- แผงข้อมูล menu / about me / photo -->
@@ -112,7 +137,7 @@
 
         const CURTAIN_OBJECT_NAMES = [ "Plane011", "Plane012" ];
 
-        // 🎯 วัตถุที่ต้องการให้เป็น Cel Shader (เฉพาะ Circle007 ชาม และ Circle008 แก้วน้ำ)
+        // วัตถุที่ต้องการให้เป็น Cel Shader (เฉพาะ Circle007 ชาม และ Circle008 แก้วน้ำ)
         const TOON_OBJECT_NAMES = [ "Circle007", "Circle008" ];
 
         // ข้อมูล portfolio ของเจ้าของ
@@ -153,7 +178,7 @@
         scene.add(directionalLight);
 
         /* ============================================================
-           Cel-shading gradient map (สำหรับ Circle007 และ Circle008)
+           Cel-shading gradient map
            ============================================================ */
         function createToonGradientTexture() {
             const canvas = document.createElement('canvas');
@@ -189,8 +214,9 @@
         let aboutmeTargetObj = null;  
         let pictureTargetObj = null; 
 
-        let defaultCamPos = new THREE.Vector3();
-        let defaultCamTarget = new THREE.Vector3();
+        // กำหนดตำแหน่งมุมกล้องและจุดโฟกัสเริ่มต้นตรงหน้าร้านพอดี
+        let defaultCamPos = new THREE.Vector3(0, 0.8, 6.8);
+        let defaultCamTarget = new THREE.Vector3(0, 0.2, 0);
 
         // อาเรย์สำหรับเก็บวัตถุผ้าม่าน
         const curtainPlanes = [];
@@ -215,13 +241,11 @@
                 });
             }
 
-            model.rotation.y = -Math.PI / 2;
-
-            const allMeshNames = [];
+            // ตั้งค่าหมุนโมเดลเป็น 0 เพื่อให้ตั้งตรงหน้าร้าน (ห้ามตั้งเป็น -Math.PI / 2)
+            model.rotation.y = 0;
 
             model.traverse((node) => {
                 if (!node.isMesh) return;
-                allMeshNames.push(node.name);
 
                 const originalMap = node.material ? node.material.map : null;
                 const originalColor = node.material && node.material.color
@@ -232,7 +256,6 @@
                 const isToonTarget = TOON_OBJECT_NAMES.some(name => node.name.startsWith(name));
 
                 if (isToonTarget) {
-                    // 🎨 ใส่ Cel Shader เฉพาะ Circle007 (ชาม) และ Circle008 (แก้วน้ำ)
                     node.material = new THREE.MeshToonMaterial({
                         map: originalMap,
                         color: originalColor,
@@ -262,7 +285,6 @@
                                   CURTAIN_OBJECT_NAMES.some(name => node.name.startsWith(name));
 
                 if (isCurtain) {
-                    // บันทึกตำแหน่งและมุมเริ่มต้น
                     node.userData.initialPositionY = node.position.y;
                     node.userData.initialPositionZ = node.position.z;
                     node.userData.initialRotationX = node.rotation.x;
@@ -273,21 +295,12 @@
 
             const box = new THREE.Box3().setFromObject(model);
             const center = box.getCenter(new THREE.Vector3());
-            const size = box.getSize(new THREE.Vector3());
-
             model.position.sub(center);
 
-            const maxDim = Math.max(size.x, size.y, size.z);
-            const fov = camera.fov * (Math.PI / 180);
-            let cameraZ = Math.abs(maxDim / (2 * Math.tan(fov / 2)));
-            cameraZ *= 0.8;
-
-            camera.position.set(0, 0, cameraZ);
-            controls.target.set(0, 0, 0);
+            // ตั้งค่ากล้องเริ่มต้น
+            camera.position.copy(defaultCamPos);
+            controls.target.copy(defaultCamTarget);
             controls.update();
-
-            defaultCamPos.copy(camera.position);
-            defaultCamTarget.copy(controls.target);
 
             scene.add(model);
         }, undefined, (error) => {
@@ -343,6 +356,7 @@
             const targetCamPos = center.clone().add(dir.multiplyScalar(maxDim * distanceMultiplier));
 
             flyCameraTo(targetCamPos, center);
+            document.getElementById('btnResetCamera').style.display = 'block';
         }
 
         function flyCameraTo(targetPos, targetLook, duration = 900) {
@@ -373,6 +387,7 @@
 
         function resetCamera() {
             flyCameraTo(defaultCamPos, defaultCamTarget);
+            document.getElementById('btnResetCamera').style.display = 'none';
         }
 
         /* ============================================================
@@ -393,6 +408,7 @@
             hintEl.style.display = 'block';
         }
         document.getElementById('btnInfoClose').onclick = closeInfoPanel;
+        document.getElementById('btnResetCamera').onclick = closeInfoPanel;
 
         function showprojects() {
             focusOnObject(projectsTargetObj, 1.6);
@@ -403,7 +419,7 @@
                 <p>3D Model Interactive Store</p>
                 <p>จำลองร้านราเมง</p>
                 <p>Web Integration: ออกแบบเพื่อใช้งาน</p>
-                <p>ร่วมกับ HTML, CSSเพื่อสร้างเว็ปไซด์ 3D </p>
+                <p>ร่วมกับ HTML, CSS เพื่อสร้างเว็บไซต์ 3D</p>
                 <p>เพื่อให้ผู้ใช้สามารถคลิกตอบโต้ได้</p>
             `);
         }
@@ -444,13 +460,11 @@
 
             const elapsedTime = clock.getElapsedTime();
 
-            // --- ขยับผ้าม่านแนวตั้ง (ขึ้น-ลง / บนลงล่าง) ---
+            // ขยับผ้าม่านแนวตั้ง
             curtainPlanes.forEach((mesh, index) => {
-                // คำนวณคลื่นสำหรับขยับขึ้น-ลง (แกน Y)
                 const verticalWave = Math.sin(elapsedTime * 2.5 + index * 0.8) * 0.025;
                 mesh.position.y = mesh.userData.initialPositionY + verticalWave;
 
-                // ปรับมุมก้ม-เงย (แกน X) ร่วมด้วยเพื่อให้ดูพริ้วจากบนลงล่างตามแรงลม
                 const pitchWave = Math.cos(elapsedTime * 2.0 + index * 0.5) * 0.06;
                 mesh.rotation.x = mesh.userData.initialRotationX + pitchWave;
             });
