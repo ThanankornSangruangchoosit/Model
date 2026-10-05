@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Model - Ramen Shop Shader</title>
+<style>
+body{margin:0;overflow:hidden;background:#1a1a1a;font-family:'Sarabun','Segoe UI',sans-serif}
+canvas{display:block;width:100vw;height:100vh}
+#infoPanel{display:none;position:fixed;top:50%;right:30px;transform:translateY(-50%);width:300px;max-width:80vw;background:rgba(20,20,20,.92);border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:20px;color:#fff;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+#infoPanel h2{margin:0 0 10px;font-size:18px;color:#ff5a5f}
+#infoPanel p{margin:4px 0;font-size:14px;line-height:1.5;opacity:.9}
+#infoPanel .label{opacity:.55;font-size:12px}
+#infoPanel button{margin-top:14px;padding:8px 14px;border:none;border-radius:8px;background:#333;color:#fff;cursor:pointer}
+#infoPanel button:hover{background:#555}
+#hint{position:fixed;top:14px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.55);font-size:13px;z-index:5;pointer-events:none;text-align:center}
+#btnResetCamera{display:none;position:fixed;bottom:30px;left:50%;transform:translateX(-50%);padding:10px 20px;background:rgba(255,90,95,.9);color:#fff;border:none;border-radius:20px;font-size:14px;font-weight:bold;cursor:pointer;z-index:25;box-shadow:0 4px 15px rgba(0,0,0,.5);transition:all .2s ease}
+#btnResetCamera:hover{background:#ff5a5f;transform:translateX(-50%) scale(1.05)}
+#debugBox{position:fixed;top:14px;right:14px;background:rgba(0,0,0,.6);color:#0f0;font-family:monospace;font-size:13px;padding:8px 12px;border-radius:8px;z-index:30;display:none}
+</style>
+</head>
+<body>
+<div id="hint">คลิกปุ่ม projects / about me / credits / picture บนผนังร้านเพื่อดูข้อมูล</div>
+<button id="btnResetCamera">← กลับมุมมองหน้าร้าน</button>
+<div id="debugBox"></div>
+<div id="infoPanel">
+  <div id="infoPanelContent"></div>
+  <button id="btnInfoClose">← กลับ</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
+
+<script>
+/* ============================================================
+   ตั้งค่า / ข้อมูล
+   ============================================================ */
+const CURTAIN_OBJECT_NAMES = ["Plane011", "Plane012"]; // ผ้าม่าน -> Vertex Shader
+const TOON_OBJECT_NAMES    = ["Circle007", "Circle008"]; // ชาม/แก้ว -> Fragment Shader
+
+const portfolioData = {
+    name: "ธนัญกรณ์ แสงเริองชูสิทธิ์",
+    studentId: "6721601231",
+    major: "วิทยาการคอมพิวเตอร์",
+    faculty: "ศิลปศาสตร์และวิทยาศาสตร์",
+    bio: "thanankon.sa@ku.th"
+};
+
+/* ============================================================
+   GLSL Shaders
+   ============================================================ */
+
+/* ---------- (1) ผ้าม่าน: ใช้ Vertex Shader เป็นหลัก ---------- */
+const curtainVertexShader = `
+    uniform float uTime;
+    varying vec2 vUv;
+
+    void main() {
+        vUv = uv;
+        vec3 pos = position;
+
+        // ขยับจุดยอดเป็นคลื่น sin ตามแกน x และเวลา
+        pos.z += sin(pos.x * 5.0 + uTime) * 0.1;
+
+        // object -> world -> view -> clip
+        gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(pos, 1.0);
+    }
+`;
+
+/* fragment ของผ้าม่าน: แค่แสดง texture/สีเดิม ไม่มีการคำนวณแสงเงา */
+const curtainFragmentShader = `
+    precision mediump float;
+    uniform sampler2D uTexture;
+    uniform vec3 uColor;
+    uniform float uHasMap;
+    varying vec2 vUv;
+
+    void main() {
+        vec3 color = uColor;
+        if (uHasMap > 0.5) color *= texture2D(uTexture, vUv).rgb;
+        gl_FragColor = vec4(color, 1.0);
+    }
+`;
+
+/* ---------- (2) ชาม/แก้ว: ใช้ Fragment Shader เป็นหลัก ---------- */
+/* vertex แค่ส่งต่อ uv และ normal (ไม่แก้ตำแหน่งจุดยอด) */
+const toonVertexShader = `
+    varying vec2 vUv;
+    varying vec3 vNormal;
+
+    void main() {
+        vUv = uv;
+        vNormal = normalize(mat3(modelMatrix) * normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+`;
+
+const toonFragmentShader = `
+    precision mediump float;
+    uniform sampler2D uTexture;
+    uniform vec3 uColor;
+    uniform float uHasMap;
+    uniform vec3 uLightDir;
+    varying vec2 vUv;
+    varying vec3 vNormal;
+
+    void main() {
+        vec3 color = uColor;
+        if (uHasMap > 0.5) color *= texture2D(uTexture, vUv).rgb;
+
+        // Lambert diffuse
+        vec3 N = normalize(vNormal);
+        vec3 L = normalize(uLightDir);
+        float diffuse = max(dot(N, L), 0.0);
+
+        // Toon: เงา 2 ชั้น (รวมส่วนสว่างเป็น 3 โทน)
+        float shade;
+        if (diffuse > 0.5)      shade = 1.0;   // ส่วนสว่าง
+        else if (diffuse > 0.2) shade = 0.7;   // เงาชั้นที่ 1 (จาง)
+        else                    shade = 0.45;  // เงาชั้นที่ 2 (เข้ม)
+
+        gl_FragColor = vec4(color * shade, 1.0);
+    }
+`;
+
+/* ============================================================
+   1. Scene & Camera
+   ============================================================ */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a1a);
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(devicePixelRatio);
+renderer.outputEncoding = THREE.sRGBEncoding;
+document.body.appendChild(renderer.domElement);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
+directionalLight.position.set(0, 10, 10);
+scene.add(directionalLight);
+
+/* ทิศทางแสงที่ส่งให้ shader (ตรงกับ directionalLight) */
+const lightDir = directionalLight.position.clone().normalize();
+
+/* สร้าง ShaderMaterial โดยเก็บ texture/สีเดิมของโมเดลไว้ */
+const shaderMaterials = []; // เก็บไว้อัปเดต uTime
+function makeShaderMaterial(node, vertexShader, fragmentShader) {
+    const old = node.material;
+    const map = old && old.map ? old.map : null;
+    const color = old && old.color ? old.color.clone() : new THREE.Color(0xffffff);
+    // สีใน glTF เป็น linear แต่ ShaderMaterial ไม่แปลงเป็น sRGB ให้ จึงต้องแปลงเอง ไม่งั้นสีจะมืดเกินจริง
+    color.convertLinearToSRGB();
+    console.log('[shader]', node.name, { hasMap: !!map, color: '#' + color.getHexString(), original: old });
+    const mat = new THREE.ShaderMaterial({
+        uniforms: {
+            uTime:     { value: 0 },
+            uTexture:  { value: map },
+            uHasMap:   { value: map ? 1.0 : 0.0 },
+            uColor:    { value: new THREE.Vector3(color.r, color.g, color.b) },
+            uLightDir: { value: lightDir.clone() }
+        },
+        vertexShader, fragmentShader,
+        side: THREE.DoubleSide
+    });
+    shaderMaterials.push(mat);
+    return mat;
+}
+
+/* ============================================================
+   ตัวแปรเก็บ object + กล้อง
+   ============================================================ */
+let modelRoot = null, mixer = null;
+let projectsButtonObj = null, creditsButtonObj = null, aboutmeButtonObj = null, pictureButtonObj = null;
+let projectsTargetObj = null, creditsTargetObj = null, aboutmeTargetObj = null, pictureTargetObj = null;
+const defaultCamPos = new THREE.Vector3(0, 0.8, 6.8);
+const defaultCamTarget = new THREE.Vector3(0, 0.2, 0);
+const clock = new THREE.Clock();
+
+/* ============================================================
+   2. โหลดโมเดล
+   ============================================================ */
+const loader = new THREE.GLTFLoader();
+const dracoLoader = new THREE.DRACOLoader();
+dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+loader.setDRACOLoader(dracoLoader);
+
+loader.load('https://media.githubusercontent.com/media/ThanankornSangruangchoosit/Ball/main/Ramenbuildnolight.glb', (gltf) => {
+    const model = gltf.scene;
+    modelRoot = model;
+
+    if (gltf.animations && gltf.animations.length > 0) {
+        mixer = new THREE.AnimationMixer(model);
+        gltf.animations.forEach((clip) => mixer.clipAction(clip).play());
+    }
+    model.rotation.y = 0;
+
+    model.traverse((node) => {
+        if (!node.isMesh) return;
+
+        const originalMap = node.material ? node.material.map : null;
+        const originalColor = node.material && node.material.color ? node.material.color.clone() : new THREE.Color(0xffffff);
+
+        const isToon = TOON_OBJECT_NAMES.some(n => node.name.startsWith(n));
+        const isCurtain = CURTAIN_OBJECT_NAMES.some(n => node.name.startsWith(n));
+
+        if (isToon) {
+            // ชาม/แก้ว -> Fragment Shader (toon)
+            node.material = makeShaderMaterial(node, toonVertexShader, toonFragmentShader);
+        } else if (isCurtain) {
+            // ผ้าม่าน -> Vertex Shader (คลื่น sin)
+            node.material = makeShaderMaterial(node, curtainVertexShader, curtainFragmentShader);
+        } else if (node.name.startsWith('Cylinder')) {
+            node.material = new THREE.MeshStandardMaterial({
+                map: originalMap, color: originalColor, metalness: 0.85, roughness: 0.25
+            });
+        }
+
+        if (node.name === 'Text005') projectsButtonObj = node;
+        if (node.name === 'Text003') creditsButtonObj = node;
+        if (node.name === 'Text004') aboutmeButtonObj = node;
+        if (node.name === 'Text002') pictureButtonObj = node;
+
+        if (node.name === 'defaultMaterial') projectsTargetObj = node;
+        if (node.name === 'defaultMaterial001') creditsTargetObj = node;
+        if (node.name === 'Cube006_2') aboutmeTargetObj = node;
+        if (node.name === 'Object_0_1') pictureTargetObj = node;
+    });
+
+    const box = new THREE.Box3().setFromObject(model);
+    model.position.sub(box.getCenter(new THREE.Vector3()));
+
+    camera.position.copy(defaultCamPos);
+    controls.target.copy(defaultCamTarget);
+    controls.update();
+    scene.add(model);
+}, undefined, (error) => console.error('เกิดข้อผิดพลาดในการโหลดโมเดล:', error));
+
+/* ============================================================
+   3. Picking
+   ============================================================ */
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+renderer.domElement.addEventListener('click', (event) => {
+    if (!modelRoot) return;
+    mouse.x = (event.clientX / innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObject(modelRoot, true);
+    if (intersects.length === 0) return;
+    const hit = intersects[0].object;
+
+    const debugBox = document.getElementById('debugBox');
+    debugBox.style.display = 'block';
+    debugBox.innerText = 'คลิกโดน: ' + hit.name;
+
+    if (hit === projectsButtonObj) showprojects();
+    else if (hit === creditsButtonObj) showcredits();
+    else if (hit === aboutmeButtonObj) showaboutme();
+    else if (hit === pictureButtonObj) showpicture();
+});
+
+/* ============================================================
+   4. Camera fly
+   ============================================================ */
+let flyAnim = null;
+
+function focusOnObject(obj, distanceMultiplier = 2.2) {
+    if (!obj) return;
+    const box = new THREE.Box3().setFromObject(obj);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z, 0.2);
+    const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
+    flyCameraTo(center.clone().add(dir.multiplyScalar(maxDim * distanceMultiplier)), center);
+    document.getElementById('btnResetCamera').style.display = 'block';
+}
+
+function flyCameraTo(targetPos, targetLook, duration = 900) {
+    if (flyAnim) cancelAnimationFrame(flyAnim.id);
+    const startPos = camera.position.clone();
+    const startTarget = controls.target.clone();
+    const startTime = performance.now();
+    controls.enabled = false;
+
+    function step(now) {
+        const t = Math.min((now - startTime) / duration, 1);
+        const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        camera.position.lerpVectors(startPos, targetPos, ease);
+        controls.target.lerpVectors(startTarget, targetLook, ease);
+        controls.update();
+        if (t < 1) flyAnim = { id: requestAnimationFrame(step) };
+        else controls.enabled = true;
+    }
+    flyAnim = { id: requestAnimationFrame(step) };
+}
+
+function resetCamera() {
+    flyCameraTo(defaultCamPos, defaultCamTarget);
+    document.getElementById('btnResetCamera').style.display = 'none';
+}
+
+/* ============================================================
+   5. แผงข้อมูล (UI)
+   ============================================================ */
+const infoPanelEl = document.getElementById('infoPanel');
+const infoPanelContentEl = document.getElementById('infoPanelContent');
+const hintEl = document.getElementById('hint');
+
+function openInfoPanel(html) {
+    infoPanelContentEl.innerHTML = html;
+    infoPanelEl.style.display = 'block';
+    hintEl.style.display = 'none';
+}
+function closeInfoPanel() {
+    infoPanelEl.style.display = 'none';
+    resetCamera();
+    hintEl.style.display = 'block';
+}
+document.getElementById('btnInfoClose').onclick = closeInfoPanel;
+document.getElementById('btnResetCamera').onclick = closeInfoPanel;
+
+function showprojects() {
+    focusOnObject(projectsTargetObj, 1.6);
+    openInfoPanel(`
+        <h2>Ramen Shop</h2>
+        <p>ร้านราเมงจำลอง 3D</p>
+        <p>Portfolio</p>
+        <p>3D Model Interactive Store</p>
+        <p>จำลองร้านราเมง</p>
+        <p>Web Integration: ออกแบบเพื่อใช้งาน</p>
+        <p>ร่วมกับ HTML, CSS เพื่อสร้างเว็บไซต์ 3D</p>
+        <p>เพื่อให้ผู้ใช้สามารถคลิกตอบโต้ได้</p>
+    `);
+}
+function showcredits() {
+    focusOnObject(creditsTargetObj, 2.0);
+    openInfoPanel(``);
+}
+function showaboutme() {
+    focusOnObject(aboutmeTargetObj, 1.4);
+    openInfoPanel(`
+        <h2>About Me</h2>
+        <p><span class="label">ชื่อ-สกุล</span><br>${portfolioData.name}</p>
+        <p><span class="label">รหัสนักศึกษา</span><br>${portfolioData.studentId}</p>
+        <p><span class="label">สาขา</span><br>${portfolioData.major}</p>
+        <p><span class="label">คณะ</span><br>${portfolioData.faculty}</p>
+        <p><span class="label">อีเมล</span><br>${portfolioData.bio}</p>
+    `);
+}
+function showpicture() {
+    focusOnObject(pictureTargetObj, 1.4);
+    openInfoPanel(`
+        <h2>Photo</h2>
+        <p>รูปถ่ายตัวเอง (แสดงบนโมเดล 3D ที่กล้องกำลังซูมอยู่)</p>
+    `);
+}
+
+/* ============================================================
+   6. Render Loop
+   ============================================================ */
+function animate() {
+    controls.update();
+    const delta = clock.getDelta();
+    if (mixer) mixer.update(delta);
+
+    // ส่งเวลาให้ shader (vertex shader ของผ้าม่านใช้ uTime)
+    const t = clock.getElapsedTime();
+    shaderMaterials.forEach(m => m.uniforms.uTime.value = t);
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+}
+animate();
+
+addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
